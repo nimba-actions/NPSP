@@ -168,10 +168,10 @@ public with sharing class GE_GiftEntryController {
     }
 
     @AuraEnabled
-    public static Boolean hasQueueableId(String batchId) {
+    public static Boolean hasActiveRunningJob(String batchId) {
         try {
-            return giftBatchService.hasQueueableJob(new GiftBatchId((Id) batchId));
-        } catch (AuraHandledException e) {
+           return giftBatchService.hasActiveRunningJob(new GiftBatchId((Id) batchId));
+        }catch (AuraHandledException e) {
             throw new AuraHandledException(e.getMessage());
         }
     }
@@ -346,17 +346,17 @@ public with sharing class GE_GiftEntryController {
         } catch (AuraHandledException ex) {
           UTIL_AuraEnabledCommon.throwAuraHandledException(ex.getMessage());
         }
+
         return batchItem;
     }
 
     @AuraEnabled
-    public static ElevateBatchItem removeFromElevateBatch(ElevateBatchItem authorizedGift) {
+    public static void removeFromElevateBatch(ElevateBatchItem batchItem) {
         try {
-           elevateBatchService.removeFromElevateBatch(authorizedGift);
+           elevateBatchService.removeFromElevateBatch(batchItem);
         } catch (AuraHandledException ex) {
           UTIL_AuraEnabledCommon.throwAuraHandledException(ex.getMessage());
         }
-        return null;
     }
 
     @AuraEnabled
@@ -422,11 +422,12 @@ public with sharing class GE_GiftEntryController {
     * @return The DataImport__c record that was saved
     */
     @AuraEnabled
-    public static DataImport__c upsertDataImport(DataImport__c dataImport) {
+    public static DataImport__c upsertDataImport(String dataImport) {
+        DataImport__c dataImportObject = (DataImport__c)JSON.deserialize(dataImport, DataImport__c.class);
         try {
-            upsert dataImport Id;
+            upsert dataImportObject Id;
 
-            return dataImport;
+            return dataImportObject;
         } catch (Exception e) {
             String JSONExceptionData = ERR_ExceptionData.createExceptionWrapperJSONString(e);
 
@@ -975,7 +976,82 @@ public with sharing class GE_GiftEntryController {
             formTemplates.add(deserializedFormTemplate);
         }
 
+        if (!getGiftEntrySettings().Enable_Gateway_Assignment__c) {
+            return formTemplates;
+        }
+
+        return getMappedGateways(formTemplates);
+    }
+
+    private static GE_Template.Template[] getMappedGateways(GE_Template.Template[] formTemplates) {
+        List<PS_GatewayService.GatewayTemplateSetting> gatewayTemplateSettings = getGatewayTemplateSettings();
+        Map<String, String> gatewayNameById = getGatewayNameById(gatewayTemplateSettings);
+
+        String defaultGatewayId = new PS_IntegrationServiceConfig.Service().getGatewayIds();
+        for (GE_Template.Template formTemplate : formTemplates) {
+            if (String.isNotBlank(formTemplate.elevateSettings?.uniqueKey)) {
+
+                try {
+                    formTemplate.elevateSettings.gatewayName =
+                        gatewayNameById.get(decryptGatewayId(formTemplate.elevateSettings.uniqueKey));
+                    if (String.isBlank(formTemplate.elevateSettings.gatewayName)) {
+                        formTemplate.elevateSettings.gatewayName = System.Label.psGatewayNotValid;
+                    }
+
+                } catch (Exception e) {
+                    throw new AuraHandledException(e.getMessage());
+                }
+
+            } else {
+                if (formTemplate.elevateSettings != null) {
+                    formTemplate.elevateSettings.gatewayName = gatewayNameById.get(defaultGatewayId);
+                }
+            }
+        }
+
         return formTemplates;
+    }
+
+    private static Map<String, String> getGatewayNameById(List<PS_GatewayService.GatewayTemplateSetting> gatewayTemplateSettings) {
+        Map<String, String> gatewayNameById = new Map<String, String>();
+
+        for (PS_GatewayService.GatewayTemplateSetting gatewayTemplateSetting : gatewayTemplateSettings) {
+            gatewayNameById.put(gatewayTemplateSetting.id, gatewayTemplateSetting.gatewayName);
+        }
+
+        return gatewayNameById;
+    }
+
+    private static List<PS_GatewayService.GatewayTemplateSetting> getGatewayTemplateSettings() {
+        List<PS_GatewayService.GatewayTemplateSetting> gatewayTemplateSettings =
+                new List<PS_GatewayService.GatewayTemplateSetting>();
+        PS_GatewayService gatewayService = new PS_GatewayService();
+        String gatewaysByMerchant = gatewayService.getGatewaysByMerchant();
+
+        try {
+            gatewayTemplateSettings = (List<PS_GatewayService.GatewayTemplateSetting>)
+                    JSON.deserialize(gatewaysByMerchant,
+                            List<PS_GatewayService.GatewayTemplateSetting>.class);
+
+        } catch (Exception e) {
+            throw new AuraHandledException(e.getMessage());
+        }
+
+        return gatewayTemplateSettings;
+    }
+
+    @AuraEnabled
+    public static String getGatewayAssignmentSettingsWithDefaultGatewayName() {
+        GatewayAssignmentSettings gaSettings = new GatewayAssignmentSettings();
+        gaSettings.gatewayAssignmentEnabled = getGiftEntrySettings().Enable_Gateway_Assignment__c;
+
+        if (gaSettings.gatewayAssignmentEnabled) {
+            List<PS_GatewayService.GatewayTemplateSetting> gatewayTemplateSettings = getGatewayTemplateSettings();
+            Map<String, String> gatewayNameById = getGatewayNameById(gatewayTemplateSettings);
+            gaSettings.defaultGatewayName = gatewayNameById.get(new PS_IntegrationServiceConfig.Service().getGatewayIds());
+        }
+
+        return JSON.serialize(gaSettings);
     }
 
     /*******************************************************************************************************
@@ -1259,8 +1335,7 @@ public with sharing class GE_GiftEntryController {
         }
     }
 
-    @AuraEnabled(Cacheable= true)
-    public static String retrieveBatchCurrencyIsoCode (Id batchId) {
+    private static String retrieveBatchCurrencyIsoCode (Id batchId) {
         String query = new UTIL_Query()
             .withSelectFields(new Set<String>{UTIL_Currency.CURRENCY_ISO_CODE_FIELD})
             .withFrom(DataImportBatch__c.SObjectType)
@@ -1321,6 +1396,7 @@ public with sharing class GE_GiftEntryController {
 
     public class GatewayAssignmentSettings {
         String defaultGatewayId;
+        String defaultGatewayName;
         String defaultTemplateId;
         Boolean gatewayAssignmentEnabled;
     }

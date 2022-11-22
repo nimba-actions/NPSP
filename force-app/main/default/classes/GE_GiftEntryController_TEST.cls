@@ -219,7 +219,58 @@ public with sharing class GE_GiftEntryController_TEST {
                 'timestamp should should match the DTO and be converted to ISO 8601 format.');
     }
 
-    @IsTest
+    @isTest
+    static void batchItemRequestIncludesDefaultGateway() {
+
+        ElevateCreateBatchItemRequestDTO dto = new ElevateCreateBatchItemRequestDTO();
+        dto.amount = '2000';
+        dto.firstName = 'test';
+        dto.lastName = 'donor';
+        dto.currencyCode = 'USD';
+        dto.paymentMethodToken = '12345';
+
+        PS_IntegrationService.setConfiguration(PS_IntegrationServiceConfig_TEST.testConfig);
+
+        Test.startTest();
+        ElevateCreateBatchItemRequest request = new ElevateBatchService().buildBatchItemRequestFrom(dto);
+        Test.stopTest();
+
+        System.assertEquals(ElevateBatchItemType.ONE_TIME, request.batchItemType, 'The request batch item type ' +
+                'should be ONE_TIME');
+        System.assertNotEquals(null, request.purchaseInfo, 'The request purchase info object should not be null.');
+        System.assert(request.commitmentInfo == null, 'The request commitment info object should be null.');
+
+        System.assertEquals(PS_IntegrationServiceConfig_TEST.testGatewayId, request.purchaseInfo.gatewayId,
+                'The gateway Id should be populated with the default gateway when we do not override');
+    }
+
+    @isTest
+    static void batchItemRequestIncludesOverrideGateway() {
+        final String gatewayOverride = 'Override Gateway';
+        ElevateCreateBatchItemRequestDTO dto = new ElevateCreateBatchItemRequestDTO();
+        dto.amount = '2000';
+        dto.firstName = 'test';
+        dto.lastName = 'donor';
+        dto.currencyCode = 'USD';
+        dto.paymentMethodToken = '12345';
+        dto.gatewayOverride = gatewayOverride;
+
+        PS_IntegrationService.setConfiguration(PS_IntegrationServiceConfig_TEST.testConfig);
+
+        Test.startTest();
+        ElevateCreateBatchItemRequest request = new ElevateBatchService().buildBatchItemRequestFrom(dto);
+        Test.stopTest();
+
+        System.assertEquals(ElevateBatchItemType.ONE_TIME, request.batchItemType, 'The request batch item type ' +
+                'should be ONE_TIME');
+        System.assertNotEquals(null, request.purchaseInfo, 'The request purchase info object should not be null.');
+        System.assert(request.commitmentInfo == null, 'The request commitment info object should be null.');
+
+        System.assertEquals(gatewayOverride, request.purchaseInfo.gatewayId,
+                'The gateway Id should be populated with the Override Gateway');
+    }
+
+    @isTest
     static void addCardCommitmentToElevateBatchShouldReturnSuccessResponse() {
         GE_GiftEntryController.elevateBatchService = new ElevateBatchServiceValidRequest(
             ElevateBatchItemType.COMMITMENT, TEST_PAYMENT_METHOD_CARD);
@@ -340,10 +391,60 @@ ElevateBatchItemType.ONE_TIME, TEST_PAYMENT_METHOD_CARD);
     }
 
     @IsTest
+    static void removeBatchItemFromElevateBatchReturnsSuccessResponse() {
+        AuraHandledException auraException;
+        ElevateBatchItem batchItem;
+
+        Test.startTest();
+        try {
+            ElevateBatchItem testBatchItem = new ElevateBatchItem();
+            testBatchItem.id = 'test-batch-item-id';
+
+            ElevateBatch elevateBatch = new ElevateBatch('test-batch-id');
+            elevateBatch.elevateBatchService = new ElevateBatchServiceValidRequest();
+            batchItem = elevateBatch.elevateBatchService.removeFromElevateBatch(elevateBatch, testBatchItem);
+        } catch (AuraHandledException ex) {
+            auraException = ex;
+        }
+        Test.stopTest();
+
+        System.assert(auraException == null, 'The aura handled exception should be null since an valid request ' +
+                'has been sent.');
+        System.assertEquals(batchItem.elevateBatchId, 'test-batch-id', 'the correct batch id is not set for the ' +
+                'removed batch item.');
+        System.assertEquals(batchItem.id, 'test-batch-item-id', 'the correct batch item id is not set for the ' +
+                'removed batch item.');
+    }
+
+    @IsTest
+    static void removeBatchItemFromElevateBatchReturnsErrorResponse() {
+        AuraHandledException auraException;
+        ElevateBatchItem batchItem;
+
+        Test.startTest();
+        try {
+            ElevateBatch elevateBatch = new ElevateBatch('test-batch-id');
+            elevateBatch.elevateBatchService = new ElevateBatchServiceInvalidRequest();
+           batchItem = elevateBatch.elevateBatchService.removeFromElevateBatch(elevateBatch, new ElevateBatchItem());
+        } catch (AuraHandledException ex) {
+            auraException = ex;
+        }
+        Test.stopTest();
+
+        System.assert(auraException != null, 'The aura handled exception should not be null since an invalid request ' +
+                'has been sent.');
+        System.assert(batchItem == null, 'The failed batch item should be null.');
+        System.assertEquals('Bad Request',
+                auraException.getMessage(), 'The error message in the elevate batch response ' +
+                        'should throw an exception and the message should be the create elevate batch error ' +
+                        'message specified in the invalid request data type.');
+    }
+
+    @IsTest
     static void addBatchItemToElevateBatchShouldReturnFailureResponse() {
         GE_GiftEntryController.elevateBatchService = new ElevateBatchServiceInvalidRequest();
         String errorMessage = ElevateBatchItemCreateResponse.parse(new ElevateBatchServiceInvalidRequest()
-                .addToElevateBatchErrorResponse())
+                .elevateBatchErrorResponse())
                 .errors()[0].message;
         AuraHandledException auraException;
 
@@ -362,6 +463,8 @@ ElevateBatchItemType.ONE_TIME, TEST_PAYMENT_METHOD_CARD);
                         'should throw an exception and the message should be the create elevate batch error ' +
                         'message specified in the invalid request data type.');
     }
+
+
 
     /***
      * @description Verifies the purchase request response throws an excpetion
@@ -438,11 +541,11 @@ ElevateBatchItemType.ONE_TIME, TEST_PAYMENT_METHOD_CARD);
     @IsTest
     static void shouldUpsertDataImportRecord() {
         DataImport__c inMemoryDataImport = BDI_DataImport_TEST.newDI('First', 'Last', 100);
-        DataImport__c dataImportRecord = GE_GiftEntryController.upsertDataImport(inMemoryDataImport);
+        DataImport__c dataImportRecord = GE_GiftEntryController.upsertDataImport(JSON.serialize(inMemoryDataImport));
         System.assert(dataImportRecord.Id != null);
 
         dataImportRecord.Payment_Authorization_Token__c = 'TEST_TOKEN';
-        DataImport__c updatedDataImportRecord = GE_GiftEntryController.upsertDataImport(dataImportRecord);
+        DataImport__c updatedDataImportRecord = GE_GiftEntryController.upsertDataImport(JSON.serialize(dataImportRecord));
         System.assertEquals(dataImportRecord.Id, updatedDataImportRecord.Id);
         System.assertEquals('TEST_TOKEN', updatedDataImportRecord.Payment_Authorization_Token__c);
     }
@@ -505,6 +608,91 @@ ElevateBatchItemType.ONE_TIME, TEST_PAYMENT_METHOD_CARD);
         GE_GiftEntryController.storeFormTemplate(null,template1.name, template1.description, template1.version, templateJSON1);
 
         System.assertEquals(2, GE_GiftEntryController.getAllFormTemplates().size());
+    }
+
+    @IsTest
+    static void shouldReturnFormTemplatesWithMatchingGatewayName() {
+        Gift_Entry_Settings__c giftEntryCustomSetting = new Gift_Entry_Settings__c();
+        giftEntryCustomSetting.Enable_Gateway_Assignment__c = true;
+        UTIL_CustomSettingsFacade.getGiftEntrySettingsForTests(giftEntryCustomSetting);
+
+        final String GATEWAY_ID = '123-sample-456';
+        final String GATEWAY_ALIAS = 'Gateway Alias';
+        final String VENDOR_NAME = 'Test Vendor Name';
+        final String ENABLED_PAYMENT_METHODS = '';
+
+        PS_IntegrationServiceConfig_TEST.enableElevateIntegrationService();
+        UTIL_Http_TEST.CalloutMock calloutMock = PS_GatewayService_TEST.getPopulatedGatewaysByMerchantSuccessMock(
+                GATEWAY_ID, GATEWAY_ALIAS, VENDOR_NAME, ENABLED_PAYMENT_METHODS);
+
+        Test.startTest();
+        GE_Template.Template template0 = UTIL_UnitTestData_TEST.createSampleGatewayAssignmentTemplate(GATEWAY_ID);
+        String templateJSON0 = JSON.serialize(template0);
+        System.assert(true, templateJSON0.contains('uniqueKey'));
+        GE_GiftEntryController.storeFormTemplate(null,template0.name, template0.description, template0.version, templateJSON0);
+        Test.stopTest();
+
+        GE_Template.Template[] templates = GE_GiftEntryController.getAllFormTemplates();
+        System.assertEquals(1, templates.size(), 'There should be one template');
+        System.assertEquals(GATEWAY_ALIAS, templates[0].elevateSettings.gatewayName,
+                'Gateway alias should be ' + GATEWAY_ALIAS);
+    }
+
+    @IsTest
+    static void shouldReturnFormTemplatesWithNoMatchingGatewayName() {
+        Gift_Entry_Settings__c giftEntryCustomSetting = new Gift_Entry_Settings__c();
+        giftEntryCustomSetting.Enable_Gateway_Assignment__c = false;
+        UTIL_CustomSettingsFacade.getGiftEntrySettingsForTests(giftEntryCustomSetting);
+
+        final String GATEWAY_ID = '123-sample-456';
+        final String GATEWAY_ALIAS = 'Gateway Alias';
+        final String VENDOR_NAME = 'Test Vendor Name';
+        final String ENABLED_PAYMENT_METHODS = '';
+
+        PS_IntegrationServiceConfig_TEST.enableElevateIntegrationService();
+        UTIL_Http_TEST.CalloutMock calloutMock = PS_GatewayService_TEST.getPopulatedGatewaysByMerchantSuccessMock(
+                GATEWAY_ID, GATEWAY_ALIAS, VENDOR_NAME, ENABLED_PAYMENT_METHODS);
+
+        Test.startTest();
+        GE_Template.Template template0 = UTIL_UnitTestData_TEST.createSampleGatewayAssignmentTemplate(GATEWAY_ID);
+        String templateJSON0 = JSON.serialize(template0);
+        System.assert(true, templateJSON0.contains('uniqueKey'));
+        GE_GiftEntryController.storeFormTemplate(null,template0.name, template0.description, template0.version, templateJSON0);
+        Test.stopTest();
+
+        GE_Template.Template[] templates = GE_GiftEntryController.getAllFormTemplates();
+        System.assertEquals(1, templates.size(), 'There should be one template');
+        System.assertEquals(null, templates[0].elevateSettings.gatewayName, 'Gateway name should be null.');
+    }
+
+    @IsTest
+    static void shouldReturnTimeoutExceptionWhenAttemptingToRetrieveGatewayNames() {
+        Gift_Entry_Settings__c giftEntryCustomSetting = new Gift_Entry_Settings__c();
+        giftEntryCustomSetting.Enable_Gateway_Assignment__c = true;
+        UTIL_CustomSettingsFacade.getGiftEntrySettingsForTests(giftEntryCustomSetting);
+
+        final String GATEWAY_ID = '123-sample-456';
+        final String TIMEOUT_MESSAGE = 'Read timed out';
+
+        PS_IntegrationServiceConfig_TEST.enableElevateIntegrationService();
+        UTIL_Http_TEST.CalloutMock calloutMock = PS_GatewayService_TEST.getGatewaysByMerchantErrorMock(TIMEOUT_MESSAGE);
+
+        Test.startTest();
+        GE_Template.Template template0 = UTIL_UnitTestData_TEST.createSampleGatewayAssignmentTemplate(GATEWAY_ID);
+        String templateJSON0 = JSON.serialize(template0);
+        System.assert(true, templateJSON0.contains('uniqueKey'));
+        GE_GiftEntryController.storeFormTemplate(null,template0.name, template0.description, template0.version, templateJSON0);
+        Test.stopTest();
+
+        String errorMessage;
+        try {
+            GE_Template.Template[] templates = GE_GiftEntryController.getAllFormTemplates();
+        }
+        catch (Exception e) {
+            errorMessage = e.getMessage();
+        }
+
+        System.assertEquals(TIMEOUT_MESSAGE, errorMessage, 'Should throw timeout error');
     }
 
     /***

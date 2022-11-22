@@ -62,6 +62,7 @@ export default class GeGiftEntryFormApp extends NavigationMixin(LightningElement
     isLoading = true;
     isFormRendering = false;
     isFormCollapsed = false;
+    isFormSaveDisabled = false;
 
     giftBatch = new GiftBatch();
     elevateBatch = new ElevateBatch();
@@ -82,27 +83,25 @@ export default class GeGiftEntryFormApp extends NavigationMixin(LightningElement
         }
     }
 
+    get shouldDisableMakeRecurringButton() {
+        return this.gift.isImported();
+    }
+
     handleLoadData(event) {
         try {
             this.isFormRendering = true;
+            const giftId = event.detail.Id;
+            const foundGift = this.giftBatch.findGiftBy(giftId);
+            this.gift = new Gift(foundGift.state());
+            this.giftInView = this.gift.state();
+            this.openedGiftDonationId = this.gift.donationId();
 
-            new Promise((resolve,reject) => {
-                setTimeout(()=> {
-                    const giftId = event.detail.Id;
-                    const foundGift = this.giftBatch.findGiftBy(giftId);
-                    this.gift = new Gift(foundGift.state());
-                    this.giftInView = this.gift.state();
-                    this.openedGiftDonationId = this.gift.donationId();
-                    if (this.isFormCollapsed) {
-                        this.isFormCollapsed = false;
-                    }
-                    fireEvent(this, 'resetElevateWidget', {});
-                    resolve();
-                }, 100);
-            })
-            .finally(() => {
-                this.isFormRendering = false;
-            });
+            if (this.isFormCollapsed) {
+                this.isFormCollapsed = false;
+            }
+            fireEvent(this, 'resetElevateWidget', {});
+            
+            this.isFormRendering = false;
         } catch(error) {
             handleError(error);
         }
@@ -151,6 +150,10 @@ export default class GeGiftEntryFormApp extends NavigationMixin(LightningElement
         }
         registerListener('geBatchGiftEntryTableChangeEvent', this.retrieveBatchTotals, this);
         await Settings.init();
+    }
+
+    get batchCurrencyIsoCode() {
+        return this.giftBatchState.currencyIsoCode;
     }
 
     disconnectedCallback() {
@@ -479,6 +482,7 @@ export default class GeGiftEntryFormApp extends NavigationMixin(LightningElement
     }
 
     async handleProcessedBatch() {
+        await this.refreshBatchTable();
         this.isFormCollapsed = true;
         this._isBatchProcessing = this.giftBatchState.isProcessingGifts;
         this.shouldLoadSpinner = this._isBatchProcessing
@@ -540,6 +544,7 @@ export default class GeGiftEntryFormApp extends NavigationMixin(LightningElement
 
     async handleDelete(event) {
         try {
+            this.isFormSaveDisabled = true;
             const gift = new Gift({fields: event.detail});
             const isRemovedFromElevate = await this.removeFromElevateBatch(gift);
 
@@ -556,7 +561,9 @@ export default class GeGiftEntryFormApp extends NavigationMixin(LightningElement
                 'dismissible',
                 null
             );
+            this.isFormSaveDisabled = false;
         } catch(error) {
+            this.isFormSaveDisabled = false;
             handleError(error);
         }
     }
@@ -565,7 +572,7 @@ export default class GeGiftEntryFormApp extends NavigationMixin(LightningElement
         let isRemovedFromElevate = false;
         if (this.shouldRemoveFromElevateBatch(gift)) {
             try {
-                await this.deleteFromElevateBatch(gift.asDataImport());
+                await this.deleteFromElevateBatch(gift);
                 isRemovedFromElevate = true;
             } catch (exception) {
                 let errorMsg = GeLabelService.format(
@@ -608,7 +615,9 @@ export default class GeGiftEntryFormApp extends NavigationMixin(LightningElement
     }
 
     shouldRemoveFromElevateBatch(gift) {
-        return gift && gift.isAuthorized() && this.isElevateCustomer;
+        return gift &&
+            this.isElevateCustomer &&
+            gift.hasElevateRemovableStatus();
     }
 
     async deleteFromElevateBatch(gift) {
@@ -780,11 +789,13 @@ export default class GeGiftEntryFormApp extends NavigationMixin(LightningElement
         const schedule = event.detail;
         this.gift.addSchedule(schedule);
         this.giftInView = this.gift.state();
-        fireEvent(this.pageRef, 'geModalCloseEvent', {})
+        fireEvent(this, 'geModalCloseEvent', {});
     }
 
     handleRemoveSchedule() {
         this.gift.removeSchedule();
         this.giftInView = this.gift.state();
     }
+
+
 }

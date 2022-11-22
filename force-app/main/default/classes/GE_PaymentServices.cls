@@ -35,9 +35,6 @@
 * @description Class holds payment services purchase request related methods.
 */
 public with sharing class GE_PaymentServices {
-
-    @AuraEnabled public String vfHostName = DomainCreator.getVisualforceHostname(null);
-
     @TestVisible class PaymentServicesException extends Exception {}
 
     private static GE_PaymentServices paymentServicesInstance;
@@ -143,20 +140,34 @@ public with sharing class GE_PaymentServices {
     }
 
     /**
-     * @description Returns salesforce lightningUrl
-     * @return String JSON of org URL
+     * @description Returns salesforce lightning URL
+     * @return String JSON of lightning URL
      */
-    public String getLightningUrl() {
+    public String getLightningURL() {
         return DomainCreator.getLightningHostname();
     }
 
     /**
-     * @description Returns salesforce lightningUrl
-     * @return String JSON of org URL
+     * @description Returns salesforce visualforce URL
+     * @param namespace: string for namespace in org instance
+     * @return String JSON of visualforce URL
      */
     @AuraEnabled(cacheable=true)
-    public static String getVfForceURL() {
-        return DomainCreator.getVisualforceHostname(null);
+    public static OriginUrls getOriginUrls(String namespace) {
+        return new OriginUrls(
+            DomainCreator.getVisualforceHostname(namespace),
+                DomainCreator.getLightningHostname()
+        );
+    }
+
+    public class OriginUrls {
+        @AuraEnabled public String visualForceOriginUrl;
+        @AuraEnabled public String lightningOriginUrl;
+
+        public OriginUrls(String visualForceOriginUrl, String lightningOriginUrl) {
+            this.visualForceOriginUrl = 'https://'+visualForceOriginUrl;
+            this.lightningOriginUrl = 'https://'+lightningOriginUrl;
+        }
     }
 
     /**
@@ -240,6 +251,11 @@ public with sharing class GE_PaymentServices {
         public String consent;
         public String type;
         public String bankType;
+        public ConsentDetails consentDetails = new ConsentDetails();
+    }
+
+    public with sharing class ConsentDetails {
+        public String consentType;
     }
 
     /***

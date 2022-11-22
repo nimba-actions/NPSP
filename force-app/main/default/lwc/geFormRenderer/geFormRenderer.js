@@ -34,6 +34,7 @@ import GeFormElementHelper from './geFormElementHelper'
 import GeFormService from 'c/geFormService';
 import Settings from 'c/geSettings';
 import GeLabelService from 'c/geLabelService';
+import GeGatewaySettings from 'c/geGatewaySettings';
 import messageLoading from '@salesforce/label/c.labelMessageLoading';
 import geMakeRecurring from '@salesforce/label/c.geMakeRecurring';
 import btnContinue from '@salesforce/label/c.btnContinue';
@@ -96,8 +97,10 @@ import DATA_IMPORT_RECURRING_DONATION_CARD_EXPIRATION_YEAR
     from '@salesforce/schema/DataImport__c.Recurring_Donation_Card_Expiration_Year__c';
 import DATA_IMPORT_RECURRING_DONATION_CARD_LAST_4
     from '@salesforce/schema/DataImport__c.Recurring_Donation_Card_Last_4__c';
-import DATA_IMPORT_RECURRING_DONATION_STATUS
-    from '@salesforce/schema/DataImport__c.Recurring_Donation_Status__c';
+import DATA_IMPORT_RECURRING_DONATION_ACH_LAST_4
+    from '@salesforce/schema/DataImport__c.Recurring_Donation_ACH_Last_4__c';
+import DATA_IMPORT_RECURRING_TYPE
+    from '@salesforce/schema/DataImport__c.Recurring_Donation_Recurring_Type__c';
 
 import DATA_IMPORT_ADDITIONAL_OBJECT_FIELD from '@salesforce/schema/DataImport__c.Additional_Object_JSON__c'
 import DATA_IMPORT_ACCOUNT1_IMPORTED_FIELD from '@salesforce/schema/DataImport__c.Account1Imported__c';
@@ -125,9 +128,12 @@ import {
     PAYMENT_METHODS, ACH_CODE,
     PAYMENT_METHOD_CREDIT_CARD,
     PAYMENT_UNKNOWN_ERROR_STATUS,
-    FAILED,
+    FAILED, ACH_CONSENT_TYPE,
     COMMITMENT_INACTIVE_STATUS,
-    BATCH_COMMITMENT_CREATED_STATUS_REASON
+    BATCH_COMMITMENT_CREATED_STATUS_REASON,
+    PAYMENT_METHOD_ACH,
+    GIFT_STATUSES,
+    RECURRING_TYPE_FIXED
 } from 'c/geConstants';
 
 
@@ -189,6 +195,8 @@ export default class GeFormRenderer extends LightningElement{
     @api pageLevelErrorMessageList = [];
     @api batchCurrencyIsoCode;
     @api isElevateCustomer = false;
+    @api saveDisabled = false;
+    @api isMakeRecurringButtonDisabled = false;
 
     @track isPermissionError = false;
     @track permissionErrorTitle;
@@ -200,9 +208,8 @@ export default class GeFormRenderer extends LightningElement{
     @track description = '';
     @track mappingSet = '';
     @track version = '';
+    @api hasPaymentWidget = false;
     _isElevateWidgetInDisabledState = false;
-    _hasPaymentWidget = false;
-    latestElevateBatchId = null;
     cardholderNamesNotInTemplate = {};
     _openedGiftId;
     currentElevateBatch = new ElevateBatch();
@@ -293,6 +300,10 @@ export default class GeFormRenderer extends LightningElement{
         });
     }
 
+    isGiftCommitment() {
+        return isNotEmpty(this.formState[apiNameFor(DATA_IMPORT_RECURRING_DONATION_ELEVATE_ID)]);
+    }
+
     loadSelectedDonationFieldValues(record) {
         this.loadSelectedRecordFieldValues(
             apiNameFor(DATA_IMPORT_DONATION_IMPORTED_FIELD), record.Id);
@@ -307,8 +318,8 @@ export default class GeFormRenderer extends LightningElement{
     _formState = {}
 
     /** Determines when we show payment related text above the cancel and save buttons */
-    get showPaymentSaveNotice() {
-        return this._hasPaymentWidget && this._isElevateWidgetInDisabledState === false;
+    get isWidgetEnabled() {
+        return this.hasPaymentWidget && this._isElevateWidgetInDisabledState === false;
     }
 
     get title() {
@@ -444,12 +455,7 @@ export default class GeFormRenderer extends LightningElement{
     }
 
     shouldDisplayWarningForRecurringGiftModal() {
-        const isReviewingOpportunity = !isEmptyObject(this.giftInView?.fields[DATA_IMPORT_DONATION_IMPORTED_FIELD.fieldApiName]);
-        const isReviewingPayment = !isEmptyObject(this.giftInView?.fields[DATA_IMPORT_PAYMENT_IMPORTED_FIELD.fieldApiName]);
-        const hasSoftCredits = this.hasSoftCredits();
-        const isGiftAuthorized = this.isGiftAuthorized();
-
-        return isGiftAuthorized || isReviewingOpportunity || isReviewingPayment || hasSoftCredits;
+        return this.hasSoftCredits();
     }
 
     displayWarningForRecurringGiftModal() {
@@ -542,8 +548,14 @@ export default class GeFormRenderer extends LightningElement{
             }
 
             if (!this.isSingleGiftEntry) {
+                if (Settings.isElevateCustomer) {
+                    GeGatewaySettings.initDecryptedElevateSettings(formTemplate.elevateSettings);
+                }
                 this.sections = this.prepareFormForBatchMode(formTemplate.layout.sections);
                 this.dispatchEvent(new CustomEvent('sectionsretrieved'));
+            }
+            else if (Settings.isElevateCustomer) {
+                GeGatewaySettings.clearDecryptedElevateSettings();
             }
         }
 
@@ -862,7 +874,9 @@ export default class GeFormRenderer extends LightningElement{
                         getCurrencyLowestCommonDenominator(
                             this.getFieldValueFromFormState(DATA_IMPORT_DONATION_AMOUNT)
                         ),
-                        this.giftInView.schedule
+                        this.giftInView.schedule,
+                        this.selectedPaymentMethod() === 'ACH' ? 'ACH' : 'CARD',
+                        this.accountHolderType()
                     );
                     this.updateFormState(await tokenizedGift.tokenize(sectionsList));
                 }
@@ -878,6 +892,12 @@ export default class GeFormRenderer extends LightningElement{
                 await this.submitSingleGift();
             }
         }
+    }
+
+    nullRecurringFieldsInFormState(recurringFields) {
+        recurringFields.forEach(field => {
+            this.updateFormState({ [field]: null });
+        });
     }
 
     async submitBatch(formControls, tokenizedGift) {
@@ -914,15 +934,41 @@ export default class GeFormRenderer extends LightningElement{
         }
     }
 
+    nullGiftFieldsForTypeConversion() {
+        if (this.giftInView.hasConvertedToRecurringBatchItemType) {
+            this.nullPaymentFieldsInFormState([
+                apiNameFor(PAYMENT_AUTHORIZE_TOKEN),
+                apiNameFor(PAYMENT_DECLINED_REASON),
+                apiNameFor(PAYMENT_STATUS),
+                apiNameFor(PAYMENT_ELEVATE_ELEVATE_BATCH_ID),
+                apiNameFor(PAYMENT_ELEVATE_ID),
+                apiNameFor(PAYMENT_ELEVATE_ORIGINAL_PAYMENT_ID),
+                apiNameFor(PAYMENT_LAST_4),
+                apiNameFor(PAYMENT_CARD_NETWORK),
+                apiNameFor(PAYMENT_EXPIRATION_MONTH),
+                apiNameFor(PAYMENT_EXPIRATION_YEAR),
+                apiNameFor(PAYMENT_AUTHORIZED_AT),
+                apiNameFor(PAYMENT_GATEWAY_ID),
+                apiNameFor(PAYMENT_GATEWAY_TRANSACTION_ID)
+            ]);
+        } else if (this.giftInView.hasConvertedToElevateOneTimeBatchItemType) {
+            this.nullRecurringFieldsInFormState([
+                apiNameFor(DATA_IMPORT_RECURRING_DONATION_ELEVATE_ID)
+            ]);
+        }
+    }
+
     handleLogError(error, context) {
         this.dispatchEvent(new CustomEvent('logerror', { 
             detail: {error: error, context: context}
         }));    
     }
 
-    async shouldRemoveFromElevateBatch(gift, shouldBeCreditCard) {
-        const isCreditCard = (this.selectedPaymentMethod() === PAYMENT_METHOD_CREDIT_CARD);
-        if (!gift.id() || !this.isElevateCustomer || isCreditCard !== shouldBeCreditCard) {
+    async shouldRemoveFromElevateBatch(gift, isTokenizedGift) {
+        const shouldBeTokenized = (
+            this.selectedPaymentMethod() === PAYMENT_METHOD_CREDIT_CARD ||
+            this.selectedPaymentMethod() === PAYMENT_METHOD_ACH );
+        if (!gift.id() || !this.isElevateCustomer || shouldBeTokenized !== isTokenizedGift) {
             return false;
         }    
 
@@ -932,12 +978,20 @@ export default class GeFormRenderer extends LightningElement{
             return false;
         }
 
-        return gift.isAuthorized();
+        return gift.hasElevateRemovableStatus();
     }
 
     shouldNullPaymentRelatedFields() {
+        return this.shouldNullFormerCreditCardPayment() || this.shouldNullFormerAchPayment();
+    }
+
+    shouldNullFormerCreditCardPayment() {
         return (this.isGiftAuthorized() || this.isGiftExpired())
             && this.selectedPaymentMethod() !== PAYMENT_METHOD_CREDIT_CARD;
+    }
+
+    shouldNullFormerAchPayment() {
+        return this.isGiftPending() && this.selectedPaymentMethod() !== PAYMENT_METHOD_ACH;
     }
 
     async handleRemoveFromElevateBatch(tokenizedGift) {
@@ -946,10 +1000,12 @@ export default class GeFormRenderer extends LightningElement{
 
         try {
             if (await this.shouldRemoveFromElevateBatch(gift, !!tokenizedGift)) {
-                await this.currentElevateBatch.remove(gift.asDataImport());
+                await this.currentElevateBatch.remove(gift);
                 if (!tokenizedGift) { this.handleNullPaymentFieldsInFormState(); }
+
                 result.wasRemoved = true;
             }
+            this.nullGiftFieldsForTypeConversion();
         } catch (exception) {
             const errorMsg = GeLabelService.format(
                 this.CUSTOM_LABELS.geErrorElevateUpdate, 
@@ -969,6 +1025,7 @@ export default class GeFormRenderer extends LightningElement{
                 this.loadingText = this.isCreditCardAuth(tokenizedGift) ? this.CUSTOM_LABELS.geAuthorizingCreditCard :
                     this.CUSTOM_LABELS.geTextSaving;
 
+                tokenizedGift.gatewayOverride = GeGatewaySettings.getDecryptedGatewayId();
                 elevateBatchItem = await this.currentElevateBatch.add(tokenizedGift);
 
                 if (elevateBatchItem.batchItemType === 'ONE_TIME') {
@@ -990,6 +1047,7 @@ export default class GeFormRenderer extends LightningElement{
     }
 
     populateFormStateWithRDInfo(elevateBatchItem) {
+        // TODO: Will need to review status...
         const isSuccessful = elevateBatchItem.status === COMMITMENT_INACTIVE_STATUS &&
             elevateBatchItem.statusReason === BATCH_COMMITMENT_CREATED_STATUS_REASON;
         if (isSuccessful) {
@@ -999,6 +1057,7 @@ export default class GeFormRenderer extends LightningElement{
                 [apiNameFor(PAYMENT_ELEVATE_ELEVATE_BATCH_ID)]: this.currentElevateBatch.elevateBatchId
             });
 
+            // TODO: May need some adjustment - review status after Connector update...
             if (this.selectedPaymentMethod() === PAYMENT_METHOD_CREDIT_CARD) {
                 this.updateFormState({
                     [apiNameFor(DATA_IMPORT_RECURRING_DONATION_CARD_EXPIRATION_MONTH)]:
@@ -1008,6 +1067,11 @@ export default class GeFormRenderer extends LightningElement{
                     [apiNameFor(DATA_IMPORT_RECURRING_DONATION_CARD_LAST_4)]:
                         elevateBatchItem.cardLast4,
                 });
+            } else if (this.selectedPaymentMethod() === PAYMENT_METHOD_ACH) {
+                this.updateFormState({
+                    [apiNameFor(DATA_IMPORT_RECURRING_DONATION_ACH_LAST_4)]:
+                        elevateBatchItem.achLast4,
+                });
             }
         }
     }
@@ -1016,6 +1080,7 @@ export default class GeFormRenderer extends LightningElement{
         const isAuthorized = elevateBatchItem.status === this.PAYMENT_TRANSACTION_STATUS_ENUM.AUTHORIZED
             || elevateBatchItem.status === this.PAYMENT_TRANSACTION_STATUS_ENUM.PENDING
 
+        // TODO: May need some adjustment - review after connector update...
         if (isAuthorized) {
             this.updateFormState({
                 [apiNameFor(PAYMENT_ELEVATE_ELEVATE_BATCH_ID)]: this.currentElevateBatch.elevateBatchId,
@@ -1083,17 +1148,17 @@ export default class GeFormRenderer extends LightningElement{
         return this.formState[apiNameFor(PAYMENT_STATUS)] === this.PAYMENT_TRANSACTION_STATUS_ENUM.AUTHORIZED;
     }
 
+    isGiftPending() {
+        return this.formState[apiNameFor(PAYMENT_STATUS)] === this.PAYMENT_TRANSACTION_STATUS_ENUM.PENDING;
+    }
+
     isGiftExpired() {
         return this.formState[apiNameFor(PAYMENT_STATUS)] === this.PAYMENT_TRANSACTION_STATUS_ENUM.EXPIRED;
-    }
-    
-    shouldNotNullPaymentFields() {
-        return (this.isGiftAuthorized() || this.isGiftExpired());
     }
 
     shouldTokenizeCard() {
         return Settings.isElevateCustomer()
-            && !!(this.showPaymentSaveNotice)
+            && this.isWidgetEnabled
             && this.hasChargeableTransactionStatus();
     }
 
@@ -1380,7 +1445,16 @@ export default class GeFormRenderer extends LightningElement{
     }
 
     get isUpdateActionDisabled() {
-        return this.getFieldValueFromFormState(STATUS_FIELD) === 'Imported';
+        let newPaymentInfoRequiredAndNotEntered = this.shouldShowElevateTransactionWarning && 
+            this._isElevateWidgetInDisabledState;
+        return this.getFieldValueFromFormState(STATUS_FIELD) === GIFT_STATUSES.IMPORTED ||
+                newPaymentInfoRequiredAndNotEntered ||
+                this.saveDisabled || (
+
+                (this.isWidgetEnabled || this.isGiftCommitment()) &&
+                GeGatewaySettings.isValidElevatePaymentMethod(this.selectedPaymentMethod()) &&
+                this.getFieldValueFromFormState(DATA_IMPORT_RECURRING_TYPE) === RECURRING_TYPE_FIXED
+            )
     }
 
     get cardholderNames() {
@@ -1862,7 +1936,7 @@ export default class GeFormRenderer extends LightningElement{
     }
 
     handleRegisterPaymentWidget() {
-       this._hasPaymentWidget = true;
+       this.hasPaymentWidget = true;
     }
 
     /*******************************************************************************
@@ -2509,14 +2583,8 @@ export default class GeFormRenderer extends LightningElement{
     }
 
     hasChargeableTransactionStatus = () => {
-        const nonChargeableForSingleGift = this.selectedPaymentMethod() !== PAYMENT_METHODS.ACH
-            && this.selectedPaymentMethod() !== PAYMENT_METHOD_CREDIT_CARD;
-        if (this.isSingleGiftEntry && nonChargeableForSingleGift) {
-            return false;
-        }
-
-        const nonChargeableForBatchGift = this.selectedPaymentMethod() !== PAYMENT_METHOD_CREDIT_CARD;
-        if (!this.isSingleGiftEntry && nonChargeableForBatchGift) {
+        const nonChargeable = !GeGatewaySettings.isValidElevatePaymentMethod(this.selectedPaymentMethod());
+        if (nonChargeable) {
             return false;
         }
 
@@ -2584,7 +2652,7 @@ export default class GeFormRenderer extends LightningElement{
             : this.CUSTOM_LABELS.geTextSaving;
         delete dataImportFromFormState[apiNameFor(PAYMENT_AUTHORIZE_TOKEN)];
         const upsertResponse = await upsertDataImport({
-            dataImport: dataImportFromFormState
+            dataImport: JSON.stringify(dataImportFromFormState)
         });
         this.updateFormState(upsertResponse);
     };
@@ -2618,6 +2686,9 @@ export default class GeFormRenderer extends LightningElement{
             consent: ACH_CONSENT_MESSAGE,
             type: this.accountHolderType(),
             bankType: ACCOUNT_HOLDER_BANK_TYPES.CHECKING,
+            consentDetails: {
+                consentType: ACH_CONSENT_TYPE
+            }
         }
         const amount = getCurrencyLowestCommonDenominator(
             this.getFieldValueFromFormState(DATA_IMPORT_DONATION_AMOUNT));
@@ -2847,15 +2918,22 @@ export default class GeFormRenderer extends LightningElement{
     }
 
     get elevateTransactionWarning() {
-        return format(this.CUSTOM_LABELS.gePaymentProcessedWarning, [this.CUSTOM_LABELS.commonPaymentServices]);
+        return this.CUSTOM_LABELS.bgeEditPaymentInformation;
     }
 
-    get showElevateTransactionWarning() {
+    get shouldShowElevateTransactionWarning() {
         const paymentStatus = this.getFieldValueFromFormState(PAYMENT_STATUS);
+        return  this.getFieldValueFromFormState(STATUS_FIELD) !== GIFT_STATUSES.IMPORTED &&
+                (
+                    this.hasUnprocessedReadOnlyPaymentStatus(paymentStatus) ||
+                    !!this.getFieldValueFromFormState(DATA_IMPORT_RECURRING_DONATION_ELEVATE_ID)
+                );
+    }
+
+    hasUnprocessedReadOnlyPaymentStatus(paymentStatus) {
         return paymentStatus &&
-            (paymentStatus === this.PAYMENT_TRANSACTION_STATUS_ENUM.CAPTURED
-                || paymentStatus === this.PAYMENT_TRANSACTION_STATUS_ENUM.SUBMITTED
-                || paymentStatus === this.PAYMENT_TRANSACTION_STATUS_ENUM.SETTLED
+            (paymentStatus === this.PAYMENT_TRANSACTION_STATUS_ENUM.AUTHORIZED ||
+                paymentStatus === this.PAYMENT_TRANSACTION_STATUS_ENUM.PENDING
             );
     }
 

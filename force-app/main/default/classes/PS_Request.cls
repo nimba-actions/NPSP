@@ -41,6 +41,7 @@ public inherited sharing class PS_Request {
         REFUND,
         TRANSACTIONS,
         COMMITMENT,
+        COMMITMENT_GET,
         COMMITMENT_PAUSE,
         COMMITMENT_CANCEL,
         COMMITMENT_UPDATE_BULK,
@@ -83,12 +84,13 @@ public inherited sharing class PS_Request {
     public static String ENDPOINT_REFUND = '/v1/payments/verified/refund';
     public static String ENDPOINT_TRANSACTIONS = '/v1/payments/verified/transactions/{0}';
     public static String ENDPOINT_COMMITMENT = '/v1/payments/verified/commitments';
+    public static String ENDPOINT_COMMITMENT_GET = '/v1/payments/verified/commitments/{0}';
     public static String ENDPOINT_COMMITMENT_CANCEL = '/v1/payments/verified/commitments/{0}/cancel';
     public static String ENDPOINT_COMMITMENT_UPDATE_BULK = '/v1/payments/verified/commitments/update/bulk';
     public static String ENDPOINT_CREATE_ELEVATE_BATCH = '/v1/payments/verified/batch';
     public static String ENDPOINT_ADD_TO_ELEVATE_BATCH = '/v1/payments/verified/batch/{0}/items';
     public static String ENDPOINT_CHARGE_ELEVATE_BATCH = '/v1/payments/verified/batch/{0}/capture';
-    public static String ENDPOINT_REMOVE_FROM_ELEVATE_BATCH = '/v1/payments/verified/batch/{0}/remove/{1}';
+    public static String ENDPOINT_REMOVE_FROM_ELEVATE_BATCH = '/v1/payments/verified/batch/{0}/items/{1}';
     public static String ENDPOINT_COMMITMENT_PAUSE = '/v1/payments/verified/commitments/{0}/pause';
     public static String ENDPOINT_GATEWAYS_BY_MERCHANT = '/v1/payments/verified/merchants/{0}/gateways';
 
@@ -273,10 +275,13 @@ public inherited sharing class PS_Request {
                 );
             } else if (endpoint == ElevateEndpoint.COMMITMENT) {
                 value = ENDPOINT_COMMITMENT;
-
-                if (String.isNotBlank(commitmentId)) {
-                    value += '/' + commitmentId;
-                }
+            } else if (endpoint == ElevateEndpoint.COMMITMENT_GET) {
+                value = String.format(
+                    ENDPOINT_COMMITMENT_GET,
+                    new String[]{
+                        commitmentId
+                    }
+                );
             } else if (endpoint == ElevateEndpoint.COMMITMENT_PAUSE) {
                 value = String.format(
                     ENDPOINT_COMMITMENT_PAUSE,
@@ -461,6 +466,7 @@ public inherited sharing class PS_Request {
         private Boolean isCommitmentEndpoint () {
             return endpoint == ElevateEndpoint.COMMITMENT
                     || endpoint == ElevateEndpoint.COMMITMENT_CANCEL
+                    || endpoint == ElevateEndpoint.COMMITMENT_GET
                     || endpoint == ElevateEndpoint.COMMITMENT_UPDATE_BULK
                     || endpoint == ElevateEndpoint.COMMITMENT_PAUSE;
         }

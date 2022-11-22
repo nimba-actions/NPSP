@@ -3,8 +3,10 @@ import { format } from 'c/utilCommon';
 
 // Import custom labels
 import bgeGridNoGiftsBody from '@salesforce/label/c.bgeGridNoGiftsBody';
+import bgeEditPaymentInformation from '@salesforce/label/c.bgeEditPaymentInformation';
 import bgeGridNoGiftsHeader from '@salesforce/label/c.bgeGridNoGiftsHeader';
 import commonAccountNumber from '@salesforce/label/c.commonAccountNumber';
+import commonACHLast4 from '@salesforce/label/c.commonACHLast4';
 import commonAmount from '@salesforce/label/c.commonAmount';
 import commonAssistiveError from '@salesforce/label/c.commonAssistiveError';
 import commonAssistiveInfo from '@salesforce/label/c.commonAssistiveInfo';
@@ -209,13 +211,13 @@ import geLabelTemplateInfoDescriptionField from '@salesforce/label/c.geLabelTemp
 import geLabelTemplateInfoNameField from '@salesforce/label/c.geLabelTemplateInfoNameField';
 import gePaymentAuthExpiredHeader from '@salesforce/label/c.gePaymentAuthExpiredHeader';
 import gePaymentAuthExpiredWarningText from '@salesforce/label/c.gePaymentAuthExpiredWarningText';
-import gePaymentProcessedWarning from '@salesforce/label/c.gePaymentProcessedWarning';
 import gePaymentProcessError from '@salesforce/label/c.gePaymentProcessError';
 import gePaymentProcessingErrorBanner from '@salesforce/label/c.gePaymentProcessingErrorBanner';
 import gePaymentRequestTimedOut from '@salesforce/label/c.gePaymentRequestTimedOut';
 import geProcessAnyway from '@salesforce/label/c.geProcessAnyway';
 import geProcessingBatch from '@salesforce/label/c.geProcessingBatch';
 import geProcessingErrors from '@salesforce/label/c.geProcessingErrors';
+import geRD2FirstInstallmentPaid from '@salesforce/label/c.geRD2FirstInstallmentPaid';
 import geSearchPlaceholder from '@salesforce/label/c.geSearchPlaceholder';
 import geSelectBatchTableColumns from '@salesforce/label/c.geSelectBatchTableColumns';
 import geSelectPlaceholder from '@salesforce/label/c.geSelectPlaceholder';
@@ -247,6 +249,8 @@ import geWarningFormFieldsModalDeleteSection from '@salesforce/label/c.geWarning
 import labelBooleanFalse from '@salesforce/label/c.labelBooleanFalse';
 import labelBooleanTrue from '@salesforce/label/c.labelBooleanTrue';
 import psSelectValidPaymentMethod from '@salesforce/label/c.psSelectValidPaymentMethod';
+import recurringDonations from '@salesforce/label/c.stgNavRecurringDonations';
+import RD2_ElevateRDCannotBeFixedLength from '@salesforce/label/c.RD2_ElevateRDCannotBeFixedLength';
 
 class GeLabelService {
 
@@ -260,7 +264,9 @@ class GeLabelService {
     CUSTOM_LABELS = Object.freeze({
         bgeGridNoGiftsBody,
         bgeGridNoGiftsHeader,
+        bgeEditPaymentInformation,
         commonAccountNumber,
+        commonACHLast4,
         commonAmount,
         commonAssistiveError,
         commonAssistiveInfo,
@@ -356,6 +362,7 @@ class GeLabelService {
         geBodyMatchingSelectRecord,
         geBodyMatchingUpdatingDonation,
         geBodyPaymentNotProcessingTransaction,
+        RD2_ElevateRDCannotBeFixedLength,
         geBodyPaymentProcessedDuringBatchProcessing,
         geBodyTemplateInfoLeftCol,
         geBodyTemplatesTabDescription,
@@ -465,13 +472,13 @@ class GeLabelService {
         geLabelTemplateInfoNameField,
         gePaymentAuthExpiredHeader,
         gePaymentAuthExpiredWarningText,
-        gePaymentProcessedWarning,
         gePaymentProcessError,
         gePaymentProcessingErrorBanner,
         gePaymentRequestTimedOut,
         geProcessAnyway,
         geProcessingBatch,
         geProcessingErrors,
+        geRD2FirstInstallmentPaid,
         geSearchPlaceholder,
         geSelectBatchTableColumns,
         geSelectPlaceholder,
@@ -503,6 +510,7 @@ class GeLabelService {
         labelBooleanFalse,
         labelBooleanTrue,
         psSelectValidPaymentMethod,
+        recurringDonations
     });
 
     /*******************************************************************************
