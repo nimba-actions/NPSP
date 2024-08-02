@@ -71,14 +71,14 @@ tasks:
         group: Salesforce Metadata
         class_path: cumulusci.tasks.util.Delete
 
-    download_ldv_tests:
-        description: Downloads the NPSP-LDV-Tests repository
-        class_path: cumulusci.tasks.util.DownloadZip
-        group: Performance Tests
-        options:
-            dir: ldv_tests
-            subfolder: Cumulus-LDV-Tests-master
-            url: 'https://github.com/SalesforceFoundation/Cumulus-LDV-Tests/archive/master.zip'
+    # download_ldv_tests:
+    #     description: Downloads the NPSP-LDV-Tests repository
+    #     class_path: cumulusci.tasks.util.DownloadZip
+    #     group: Performance Tests
+    #     options:
+    #         dir: ldv_tests
+    #         subfolder: Cumulus-LDV-Tests-master
+    #         url: 'https://github.com/SalesforceFoundation/Cumulus-LDV-Tests/archive/master.zip'
 
     deploy_ldv_tests:
         description: Deploy the LDV-Tests repo to your org.
