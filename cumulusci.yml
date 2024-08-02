@@ -35,19 +35,23 @@ project:
                     title: Installation Info
     dependencies:
         # npo02 (includes npe01)
-        - github: https://github.com/SalesforceFoundation/Households
+        - github: https://github.com/nimba-actions/Households
+          tag: rel/3.18
         # npe03
-        - github: https://github.com/SalesforceFoundation/Recurring_Donations
+        - github: https://github.com/nimba-actions/Recurring_Donations
+          tag: rel/3.25
         # npe4
-        - github: https://github.com/SalesforceFoundation/Relationships
+        - github: https://github.com/nimba-actions/Relationships
+          tag: rel/3.15
         # npe5
-        - github: https://github.com/SalesforceFoundation/Affiliations
+        - github: https://github.com/nimba-actions/Affiliations
+          tag: rel/3.13
     dependency_resolutions:
         preproduction: include_beta
 
 sources:
     pmm:
-        github: "https://github.com/SalesforceFoundation/pmm"
+        github: "https://github.com/nimba-actions/pmm"
 
 
 tasks:
