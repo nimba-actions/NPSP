@@ -76,7 +76,7 @@ jobs:
       - name: Assign Reviewer if SfdoInstrumentationService is in use
         id: assign_reviewers_if_instrumentation
         if: contains(steps.get_pr_diff.outputs.diff, 'SfdoInstrumentationService')
-        uses: SalesforceFoundation/github-script@v4
+        uses: nimba-actions/github-script@v4
         with:
           script: |
             github.issues.addLabels({
@@ -107,7 +107,7 @@ jobs:
       - name: Fail Build if SfdoLogUtils core class is directly referenced
         id: assign_reviewers_if_core_class
         if: contains(steps.get_pr_diff.outputs.diff, 'SfdoLogUtils.log(')
-        uses: SalesforceFoundation/github-script@v4
+        uses: nimba-actions/github-script@v4
         with:
           script: |
             github.issues.addLabels({

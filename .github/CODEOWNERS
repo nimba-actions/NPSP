@@ -1,19 +1,19 @@
 
 # Python
-*.py                  @SalesforceFoundation/release-engineering-reviewers
+*.py                  @nimba-actions/release-engineering-reviewers
 
 # CumulusCI
-/cumulusci.yml        @SalesforceFoundation/release-engineering-reviewers
-/tasks/               @SalesforceFoundation/release-engineering-reviewers
+/cumulusci.yml        @nimba-actions/release-engineering-reviewers
+/tasks/               @nimba-actions/release-engineering-reviewers
 
 # Heroku CI
-/Gemfile.lock         @SalesforceFoundation/release-engineering-reviewers
-/app.json             @SalesforceFoundation/release-engineering-reviewers
-/requirements.txt     @SalesforceFoundation/release-engineering-reviewers
-/runtime.txt          @SalesforceFoundation/release-engineering-reviewers
+/Gemfile.lock         @nimba-actions/release-engineering-reviewers
+/app.json             @nimba-actions/release-engineering-reviewers
+/requirements.txt     @nimba-actions/release-engineering-reviewers
+/runtime.txt          @nimba-actions/release-engineering-reviewers
 
 # GitHub Actions
-.github/workflows/    @SalesforceFoundation/release-engineering-reviewers
+.github/workflows/    @nimba-actions/release-engineering-reviewers
 
 # NPSP Special Folders
 /unpackaged/config/core_instrumentation_mock_classes/        @force2b

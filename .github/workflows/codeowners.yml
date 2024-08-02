@@ -6,6 +6,4 @@ on:
       - labeled
       - review_requested
 
-jobs:
-  shared-codeowners:
-    uses: SalesforceFoundation/.github/.github/workflows/codeowners.yml@main
+
